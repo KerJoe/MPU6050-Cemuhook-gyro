@@ -1,9 +1,9 @@
 #include "Wire.h"
-#include "MPU6050.h"
-#include "I2Cdev.h"
+#include "MPU6050.h" // by jrowberg,
+#include "I2Cdev.h"  // https://github.com/jrowberg/i2cdevlib
+#include <CRC32.h> // by bakercp, https://github.com/bakercp/CRC32
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
-#include <CRC32.h>
 
 WiFiUDP udp;
 char wifiSSID[] = "********";
@@ -12,14 +12,13 @@ unsigned int udpPort = 26760;
 char udpIn[28];
 byte udpOut[100];
 
-bool sendControllerData = false;
 int16_t accXI, accYI, accZI, gyrPI, gyrYI, gyrRI; // Raw integer orientation data
 float accXF, accYF, accZF, gyrPF, gyrYF, gyrRF; // Float orientation data
-uint32_t dataPacketNumber = 0; 
-uint32_t dataSendTime; // Time of the last data send
+uint32_t dataPacketNumber = 0; // Current data packet count
+uint32_t dataSendTime; // Current time in microseconds
 uint32_t dataRequestTime; // Time of the last data request
-uint32_t dataSendDelay = 10000; // Time between data packets
-uint32_t dataRequestTimeout = 120000000; // Maximum wait time for data request packet
+uint32_t dataSendDelay = 10000; // Time between sending data packages
+uint32_t dataRequestTimeout = 120000000; // Timeout time for data request in microseconds
 
 MPU6050 accgyr;
 const int MPU_addr = 0x68; // I2C address of the MPU-6050
@@ -96,7 +95,7 @@ int makeInfoPackage(byte* output, byte numberOfControllers)
   CRC32 crc; // Caclulate checksum
   for(byte i = 0; i < 20 + numberOfControllers * 12; i++) crc.update(udpOut[i]);
   uint32_t Checksum = crc.finalize();
-  memcpy(&*(output + 8), &Checksum, sizeof(Checksum)); // Copy from Checksum to packet array
+  memcpy(&*(output + 8), &Checksum, sizeof(Checksum)); // Copy bytes from Checksum to packet array
   
   return 20 + numberOfControllers * 12; // Return the number of bytes in packet
 }
@@ -220,16 +219,16 @@ void setup()
   Serial.print(WiFi.localIP());
 
   udp.begin(udpPort);
-  Serial.print("\nUDP server setted up at port: ");
+  Serial.print("\nUDP server has been set up at port: ");
   Serial.println(udpPort);  
   
   Serial.println("Initialize MPU6050");        
   Wire.begin();
   accgyr.initialize();    
-  accgyr.setFullScaleGyroRange(gyroSens); // Set sensetivity at +/- 500 degrees/sec
+  accgyr.setFullScaleGyroRange(gyroSens); // Set selected gyro sensetivity
   accgyr.setDLPFMode(4); // Set low pass filter to 20 hz, for noise filtering
   Serial.println(accgyr.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
-  // Set offsets to precalculated values
+  // Set offsets to values calculated by IMU_ZERO example sketch
   accgyr.setXAccelOffset(-2525);
   accgyr.setYAccelOffset(2319);
   accgyr.setZAccelOffset(1101);
@@ -262,38 +261,52 @@ void loop()
       break;
       case 0x02: // Controller input data
         Serial.println("Got data request!");
-        sendControllerData = true; // Start sending controller data
-        dataRequestTime = millis();
+        dataRequestTime = millis(); // Refresh timeout timer        
       break;      
     }
   } 
-  if((micros() - dataSendTime) > dataRequestTimeout) // Check if timedout by a lack of controller data request
-  {
-    sendControllerData = false;
+  if((micros() - dataSendTime) > dataRequestTimeout) // Check if timedout by a lack of controller data requests
+  {    
     ESP.deepSleep(0); // If we haven't recieved any datapacket in time, than orientation information is not needed so we will shutdown to save energy for the gamepad
   }
-  if (sendControllerData && ((micros() - dataSendTime) > dataSendDelay)) // Check if enough time has elapsed between data packets
-  {    
-    //Serial.print(" Delay: "); Serial.print(micros() - dataSendTime - dataSendDelay);
+  if (micros() - dataSendTime > dataSendDelay) // Check if enough time has elapsed between data packets
+  {        
     dataPacketNumber++; dataSendTime = micros();
     
     accgyr.getMotion6(&accXI, &accYI, &accZI, &gyrPI, &gyrRI, &gyrYI);
-    // Comment or uncomment to set correct rotational directions
-    //accXI = -accXI;
-    //gyrRI = -gyrRI;
-    gyrRI = -gyrRI;
-    //accXI = -accXI;
-    accYI = -accYI;
-    gyrPI = -gyrPI;
-    //accZI = -accZI;
-    gyrYI = -gyrYI;
 
     // For MPU-6050 the biggest possible number is 32768 and smallest is -32767,
     // But because it uses 2's complement 16 bit signed numbers the number 32728 is understood as -32728
     // So if we want to prevent the wrap arround from positive to negative we need
     // to subtract 1 from the raw data
     accXI--; accYI--; accZI--;
-    gyrPI--; gyrYI--; gyrRI--;    
+    gyrPI--; gyrYI--; gyrRI--;   
+
+    // To transform data from gyroscope to the form used by cemuhook use these guidelines
+    // (You can also use a demonstration image from the github page):
+    // -----
+    // 1) The default position (i.e. when the controller is lying on a flat surface) values 
+    //    of the controller are accXF = 0, accYF = -1, accZF = 0, gyrPF = 0, gyrRF = 0, gyrYF = 0;
+    // 2) When the face side of the controller points down accelerometer values are accXF = 0, accYF = 1, accZF = 0
+    //    When the underside of the controller points down accelerometer values are accXF = 0, accYF = -1, accZF = 0
+    //    When the left side of the controller points down accelerometer values are accXF = -1, accYF = 0, accZI = 0
+    //    When the right side of the controller points down accelerometer values are accXF = 1, accYF = 0, accZI = 0
+    //    When the front side of the controller points down accelerometer values are accXF = 0, accYF = 0, accZI = -1
+    //    When the back side of the controller points down accelerometer values are accXF = 0, accYF = 0, accZI = 1
+    // 3) When rotating controller from left to right gyrYF increases
+    //    When rotating controller from right to left gyrYF decreases
+    //    When rotating controller from down to up gyrPF increases
+    //    When rotating controller from up to down gyrPF decreases
+    //    When rotating controller from left grip pointing down to left grip pointing up gyrRF increases
+    //    When rotating controller from left grip pointing up to left grip pointing dwon gyrRF decreases    
+    uint16_t tmp;
+    tmp = accYI;
+    accYI = accZI;
+    accZI = -tmp;
+    gyrRI = -gyrRI;
+    accYI = -accYI;
+    gyrPI = -gyrPI;
+    gyrYI = -gyrYI;    
     
     // Convert raw data to float.
     accXF = accXI / 16384.0f; // Divide by LSB/mg, for 2g sensitivity it is 16384
