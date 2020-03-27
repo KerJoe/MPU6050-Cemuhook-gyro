@@ -17,7 +17,7 @@ float accXF, accYF, accZF, gyrPF, gyrYF, gyrRF; // Float orientation data
 uint32_t dataPacketNumber = 0; // Current data packet count
 uint32_t dataSendTime; // Current time in microseconds
 uint32_t dataRequestTime; // Time of the last data request
-uint32_t dataSendDelay = 10000; // Time between sending data packages
+uint32_t dataSendDelay = 4000; // Time between sending data packages
 uint32_t dataRequestTimeout = 120000000; // Timeout time for data request in microseconds
 
 MPU6050 accgyr;
@@ -223,18 +223,18 @@ void setup()
   Serial.println(udpPort);  
   
   Serial.println("Initialize MPU6050");        
-  Wire.begin();
+  Wire.begin(); // Connect MPU6050 to SCL - GPIO5, D1; SDA - GPIO4, D2.
   accgyr.initialize();    
   accgyr.setFullScaleGyroRange(gyroSens); // Set selected gyro sensetivity
   accgyr.setDLPFMode(4); // Set low pass filter to 20 hz, for noise filtering
   Serial.println(accgyr.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
   // Set offsets to values calculated by IMU_ZERO example sketch
-  accgyr.setXAccelOffset(-2525);
-  accgyr.setYAccelOffset(2319);
-  accgyr.setZAccelOffset(1101);
-  accgyr.setXGyroOffset(10);
-  accgyr.setYGyroOffset(-80);
-  accgyr.setZGyroOffset(-10);
+  accgyr.setXAccelOffset(-2583);
+  accgyr.setYAccelOffset(2380);
+  accgyr.setZAccelOffset(1099);
+  accgyr.setXGyroOffset(3);
+  accgyr.setYGyroOffset(-82);
+  accgyr.setZGyroOffset(-5);
 
   dataRequestTime = millis(); // Set dataRequestTime, so that if we won't get a data request in time we will shutdown
 
@@ -261,7 +261,7 @@ void loop()
       break;
       case 0x02: // Controller input data
         Serial.println("Got data request!");
-        dataRequestTime = millis(); // Refresh timeout timer        
+        dataRequestTime = micros(); // Refresh timeout timer        
       break;      
     }
   } 
@@ -316,13 +316,6 @@ void loop()
     gyrPF = gyrPI / gyroLSB;  // Divide by LSB/deg/s
     gyrYF = gyrYI / gyroLSB;
     gyrRF = gyrRI / gyroLSB;
-
-    Serial.print(" AX: "); Serial.print(accXF);
-    Serial.print(" AY: "); Serial.print(accYF);
-    Serial.print(" AZ: "); Serial.print(accZF);
-    Serial.print(" GP: "); Serial.print(gyrPF);
-    Serial.print(" GY: "); Serial.print(gyrYF);
-    Serial.print(" GR: "); Serial.println(gyrRF);
     
     int packetOutSize = makeDataPackage(&udpOut[0], dataPacketNumber, dataSendTime, accXF, accYF, accZF, gyrPF, gyrYF, gyrRF);
 
