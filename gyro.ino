@@ -32,70 +32,70 @@ const float gyroLSB = 131.0f / pow(2, gyroSens);
 int makeInfoPackage(byte* output, byte numberOfControllers)
 {
   // Magic server string
-  *(output + 0) = (byte)'D';
-  *(output + 1) = (byte)'S';
-  *(output + 2) = (byte)'U';
-  *(output + 3) = (byte)'S';
+  output[0] = (byte)'D';
+  output[1] = (byte)'S';
+  output[2] = (byte)'U';
+  output[3] = (byte)'S';
   // Protocol version (1001)
-  *(output + 4) = 0xE9;
-  *(output + 5) = 0x03;
+  output[4] = 0xE9;
+  output[5] = 0x03;
   // Packet length without header plus the length of event type (4)
-  *(output + 6) = (byte)(4 + numberOfControllers * 12);
-  *(output + 7) = 0;
+  output[6] = (byte)(4 + numberOfControllers * 12);
+  output[7] = 0;
   // Zero out CRC32 field
-  *(output + 8) = 0;
-  *(output + 9) = 0;
-  *(output + 10) = 0;
-  *(output + 11) = 0;
+  output[8] = 0;
+  output[9] = 0;
+  output[10] = 0;
+  output[11] = 0;
   // Set server id to some value (0)
-  *(output + 12) = 0;
-  *(output + 13) = 0;
-  *(output + 14) = 0;
-  *(output + 15) = 0;
+  output[12] = 0;
+  output[13] = 0;
+  output[14] = 0;
+  output[15] = 0;
   // Event type, controller information (0x00100001)
-  *(output + 16) = 0x01;
-  *(output + 17) = 0x00;
-  *(output + 18) = 0x10;
-  *(output + 19) = 0x00;
+  output[16] = 0x01;
+  output[17] = 0x00;
+  output[18] = 0x10;
+  output[19] = 0x00;
   
-  *(output + 20) = 0x00; // Slot of the device we are reporting about (0)
-  *(output + 21) = 0x02; // Slot state, connected (2)
-  *(output + 22) = 0x02; // Device model, full gyro aka DS4 (2)
-  *(output + 23) = 0x02; // Connection type, bluetooth (2). (May be either USB (1) or Bluetooth (2))
+  output[20] = 0x00; // Slot of the device we are reporting about (0)
+  output[21] = 0x02; // Slot state, connected (2)
+  output[22] = 0x02; // Device model, full gyro aka DS4 (2)
+  output[23] = 0x02; // Connection type, bluetooth (2). (May be either USB (1) or Bluetooth (2))
   // MAC address of device (0x000000000001)
-  *(output + 24) = 0x01; 
-  *(output + 25) = 0x00;
-  *(output + 26) = 0x00;
-  *(output + 27) = 0x00;
-  *(output + 28) = 0x00;
-  *(output + 29) = 0x00;
+  output[24] = 0x01; 
+  output[25] = 0x00;
+  output[26] = 0x00;
+  output[27] = 0x00;
+  output[28] = 0x00;
+  output[29] = 0x00;
   // Batery status, full (5)
-  *(output + 30) = 0x05; // ...
-  *(output + 31) = 0x00; // Termination byte
+  output[30] = 0x05; // ...
+  output[31] = 0x00; // Termination byte
 
   // Set controllers other than 0 to unconected state
   for (byte i = 1; i < numberOfControllers; i++)
   {
-      *(output + 20 + i * 12) = i;    // Slot of the device we are reporting about (i)
-      *(output + 21 + i * 12) = 0x00; // Slot state, not connected (0)
-      *(output + 22 + i * 12) = 0x00; // Device model, not applicable (0)
-      *(output + 23 + i * 12) = 0x00; // Connection type, not applicable (0)
+      output[20 + i * 12] = i;    // Slot of the device we are reporting about (i)
+      output[21 + i * 12] = 0x00; // Slot state, not connected (0)
+      output[22 + i * 12] = 0x00; // Device model, not applicable (0)
+      output[23 + i * 12] = 0x00; // Connection type, not applicable (0)
       // MAC address of device, not applicable (0x000000000000)
-      *(output + 24 + i * 12) = 0x00;
-      *(output + 25 + i * 12) = 0x00;
-      *(output + 26 + i * 12) = 0x00;
-      *(output + 27 + i * 12) = 0x00;
-      *(output + 28 + i * 12) = 0x00;
-      *(output + 29 + i * 12) = 0x00;
+      output[24 + i * 12] = 0x00;
+      output[25 + i * 12] = 0x00;
+      output[26 + i * 12] = 0x00;
+      output[27 + i * 12] = 0x00;
+      output[28 + i * 12] = 0x00;
+      output[29 + i * 12] = 0x00;
       // Batery status, not applicable (0)
-      *(output + 30 + i * 12) = 0x00; // ...
-      *(output + 31 + i * 12) = 0x00; // Termination byte
+      output[30 + i * 12] = 0x00; // ...
+      output[31 + i * 12] = 0x00; // Termination byte
   }
 
   CRC32 crc; // Caclulate checksum
   for(byte i = 0; i < 20 + numberOfControllers * 12; i++) crc.update(udpOut[i]);
   uint32_t Checksum = crc.finalize();
-  memcpy(&*(output + 8), &Checksum, sizeof(Checksum)); // Copy bytes from Checksum to packet array
+  memcpy(&output[8], &Checksum, sizeof(Checksum)); // Copy bytes from Checksum to packet array
   
   return 20 + numberOfControllers * 12; // Return the number of bytes in packet
 }
@@ -105,88 +105,88 @@ int makeDataPackage(byte* output, uint32_t packetCount, uint32_t timestamp,
                     float gyroscopePit, float gyroscopeYaw, float gyroscopeRol)
 {
   // Magic server string
-  *(output + 0) = (byte)'D';
-  *(output + 1) = (byte)'S';
-  *(output + 2) = (byte)'U';
-  *(output + 3) = (byte)'S';
+  output[0] = (byte)'D';
+  output[1] = (byte)'S';
+  output[2] = (byte)'U';
+  output[3] = (byte)'S';
   // Protocol version (1001)
-  *(output + 4) = 0xE9;
-  *(output + 5) = 0x03;
+  output[4] = 0xE9;
+  output[5] = 0x03;
   // Packet length without header plus the length of event type (4)
-  *(output + 6) = (byte)(80 + 4);
-  *(output + 7) = 0;
+  output[6] = (byte)(80 + 4);
+  output[7] = 0;
   // Zero out CRC32 field
-  *(output + 8) = 0;
-  *(output + 9) = 0;
-  *(output + 10) = 0;
-  *(output + 11) = 0;
+  output[8] = 0;
+  output[9] = 0;
+  output[10] = 0;
+  output[11] = 0;
   // Set server id to some value (0)
-  *(output + 12) = 0;
-  *(output + 13) = 0;
-  *(output + 14) = 0;
-  *(output + 15) = 0;
+  output[12] = 0;
+  output[13] = 0;
+  output[14] = 0;
+  output[15] = 0;
   // Event type, controller data (0x00100002)
-  *(output + 16) = 0x02;
-  *(output + 17) = 0x00;
-  *(output + 18) = 0x10;
-  *(output + 19) = 0x00;
+  output[16] = 0x02;
+  output[17] = 0x00;
+  output[18] = 0x10;
+  output[19] = 0x00;
 
 
-  *(output + 20) = 0x00; // Slot of the device we are reporting about (0)
-  *(output + 21) = 0x02; // Slot state, connected (2)
-  *(output + 22) = 0x02; // Device model, full gyro aka DS4 (2)
-  *(output + 23) = 0x02; // Connection type, bluetooth (2). (May be either USB (1) or Bluetooth (2))
+  output[20] = 0x00; // Slot of the device we are reporting about (0)
+  output[21] = 0x02; // Slot state, connected (2)
+  output[22] = 0x02; // Device model, full gyro aka DS4 (2)
+  output[23] = 0x02; // Connection type, bluetooth (2). (May be either USB (1) or Bluetooth (2))
   // MAC address of device (0x000000000001)
-  *(output + 24) = 0x01; 
-  *(output + 25) = 0x00;
-  *(output + 26) = 0x00;
-  *(output + 27) = 0x00;
-  *(output + 28) = 0x00;
-  *(output + 29) = 0x00;
+  output[24] = 0x01; 
+  output[25] = 0x00;
+  output[26] = 0x00;
+  output[27] = 0x00;
+  output[28] = 0x00;
+  output[29] = 0x00;
   // Batery status, full (5)
-  *(output + 30) = 0x05; // ...
+  output[30] = 0x05; // ...
 
 
-  *(output + 31) = 0x01; // Device state, active (1)
+  output[31] = 0x01; // Device state, active (1)
   memcpy(&udpOut[32], &packetCount, sizeof(packetCount)); // Copy from packetCount to packet array 
   // We don't care about button, joystick and touchpad data, so we just set it to zero.
-  *(output + 36) = 0x00; 
-  *(output + 37) = 0x00;
-  *(output + 38) = 0x00;
-  *(output + 39) = 0x00;
-  *(output + 40) = 0x00;
-  *(output + 41) = 0x00;
-  *(output + 42) = 0x00;
-  *(output + 43) = 0x00;
-  *(output + 44) = 0x00;
-  *(output + 45) = 0x00;
-  *(output + 46) = 0x00;
-  *(output + 47) = 0x00;
-  *(output + 48) = 0x00;
-  *(output + 49) = 0x00;
-  *(output + 50) = 0x00;
-  *(output + 51) = 0x00;
-  *(output + 52) = 0x00;
-  *(output + 53) = 0x00;
-  *(output + 54) = 0x00;
-  *(output + 55) = 0x00;
-  *(output + 56) = 0x00;
-  *(output + 57) = 0x00;
-  *(output + 58) = 0x00;
-  *(output + 59) = 0x00;
-  *(output + 60) = 0x00;
-  *(output + 61) = 0x00;
-  *(output + 62) = 0x00;
-  *(output + 63) = 0x00;
-  *(output + 64) = 0x00;
-  *(output + 65) = 0x00;
-  *(output + 66) = 0x00;
-  *(output + 67) = 0x00;
+  output[36] = 0x00; 
+  output[37] = 0x00;
+  output[38] = 0x00;
+  output[39] = 0x00;
+  output[40] = 0x00;
+  output[41] = 0x00;
+  output[42] = 0x00;
+  output[43] = 0x00;
+  output[44] = 0x00;
+  output[45] = 0x00;
+  output[46] = 0x00;
+  output[47] = 0x00;
+  output[48] = 0x00;
+  output[49] = 0x00;
+  output[50] = 0x00;
+  output[51] = 0x00;
+  output[52] = 0x00;
+  output[53] = 0x00;
+  output[54] = 0x00;
+  output[55] = 0x00;
+  output[56] = 0x00;
+  output[57] = 0x00;
+  output[58] = 0x00;
+  output[59] = 0x00;
+  output[60] = 0x00;
+  output[61] = 0x00;
+  output[62] = 0x00;
+  output[63] = 0x00;
+  output[64] = 0x00;
+  output[65] = 0x00;
+  output[66] = 0x00;
+  output[67] = 0x00;
   // Copy 4 lower bytes of timestamp and clear 4 higher bytes of timestamp
-  *(output + 72) = 0x00; 
-  *(output + 73) = 0x00; 
-  *(output + 74) = 0x00; 
-  *(output + 75) = 0x00;
+  output[72] = 0x00; 
+  output[73] = 0x00; 
+  output[74] = 0x00; 
+  output[75] = 0x00;
   memcpy(&output [68], &timestamp, sizeof(timestamp)); // Copy from timestamp to packet array   
   // Move accelerometer and gyroscope data
   memcpy(&output [76], &accellerometerX, sizeof(accellerometerX));
@@ -199,7 +199,7 @@ int makeDataPackage(byte* output, uint32_t packetCount, uint32_t timestamp,
   CRC32 crc; // Caclulate checksum
   for(byte i = 0; i < 100; i++) crc.update(output [i]);
   uint32_t Checksum = crc.finalize();
-  memcpy(&*(output + 8), &Checksum, sizeof(Checksum)); // Copy from Checksum to packet array
+  memcpy(&output[8], &Checksum, sizeof(Checksum)); // Copy from Checksum to packet array
   
   return 100; // Return the number of bytes in packet
 }
@@ -265,7 +265,7 @@ void loop()
       break;      
     }
   } 
-  if((micros() - dataSendTime) > dataRequestTimeout) // Check if timedout by a lack of controller data requests
+  if (micros() - dataRequestTime > dataRequestTimeout) // Check if timedout by a lack of controller data requests
   {    
     ESP.deepSleep(0); // If we haven't recieved any datapacket in time, than orientation information is not needed so we will shutdown to save energy for the gamepad
   }
