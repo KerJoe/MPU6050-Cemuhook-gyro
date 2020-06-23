@@ -12,8 +12,11 @@ uint16_t udpPort = 26760;
 uint8_t  udpIn[28];
 uint8_t  udpOut[100];
 
+bool serialPlotting = false; // Change when using serial plotter
+bool gyrYOffsetCallibration = true; // Calculate additional Yaw offset
 int16_t accXI, accYI, accZI, gyrPI, gyrYI, gyrRI; // Raw integer orientation data
 float   accXF, accYF, accZF, gyrPF, gyrYF, gyrRF; // Float orientation data
+float   gyrOffYF = 0;
 uint32_t dataPacketNumber = 0; // Current data packet count
 // All time variables are in microseconds
 uint32_t dataSendTime; // Current time
@@ -22,6 +25,7 @@ const uint32_t dataSendDelay = 4000; // Time between sending data packages
 const uint32_t dataRequestTimeout = 120000000; // Timeout time for data request
 
 MPU6050 accgyr;
+const uint8_t MPU6050_sda = 4, MPU6050_scl = 5; // MPU6050 I2C GPIO connection
 const uint8_t MPU_addr = 0x68; // I2C address of the MPU-6050
 // Gyro sensitivity 0: +/-250 deg/s, 1: +/-500 deg/s, 2: +/-1000 deg/s, 3: +/-2000 deg/s
 // If set too low it will introduce clipping
@@ -222,18 +226,31 @@ void setup()
   Serial.println(udpPort);  
   
   Serial.println("Initializing MPU6050");        
-  Wire.begin(); // Connect MPU6050 to SCL - GPIO5, D1; SDA - GPIO4, D2.
+  Wire.begin(MPU6050_sda, MPU6050_scl); // Connect MPU6050 to GPIO pins defined in MPU6050_sda and MPU6050_scl
   accgyr.initialize();    
   Serial.println(accgyr.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
   accgyr.setFullScaleGyroRange(gyroSens); // Set selected gyro sensetivity
   accgyr.setDLPFMode(4); // Set low pass filter to 20 hz, for noise filtering  
   // Set offsets to values calculated by IMU_ZERO example sketch
-  accgyr.setXAccelOffset(-2583);
-  accgyr.setYAccelOffset(2380);
-  accgyr.setZAccelOffset(1099);
-  accgyr.setXGyroOffset(3);
-  accgyr.setYGyroOffset(-82);
-  accgyr.setZGyroOffset(-5);
+  accgyr.setXAccelOffset(-2741);
+  accgyr.setYAccelOffset(2456);
+  accgyr.setZAccelOffset(1400);
+  accgyr.setXGyroOffset(-37);
+  accgyr.setYGyroOffset(-24);
+  accgyr.setZGyroOffset(167);
+
+  if (gyrYOffsetCallibration)
+  {
+    Serial.print("Additional Yaw callibration");  
+    for (uint8_t i = 0; i < 10; i++) // Use simple arithmetic mean
+    {
+      accgyr.getMotion6(&accXI, &accYI, &accZI, &gyrPI, &gyrRI, &gyrYI);
+      gyrOffYF += gyrYI / gyroLSB; // Instead of gyrYI use your actual Yaw axis
+      Serial.print("."); delay(100);
+    }  
+    gyrOffYF /= 10; Serial.println(gyrOffYF);
+  }
+  else gyrOffYF = 0.5f; // Make offset constant after a single callibration
 
   dataRequestTime = micros(); // Set dataRequestTime, so that if we won't get a data request in time we will shutdown
 
@@ -259,7 +276,8 @@ void loop()
         udp.endPacket();        
       break;
       case 0x02: // Controller input data
-        Serial.println("Got data request!");
+        Serial.println("Got data request!");      
+        
         dataRequestTime = micros(); // Refresh timeout timer        
       break;      
     }
@@ -310,19 +328,24 @@ void loop()
     //    When rotating controller from up to down gyrPF decreases
     //    When rotating controller from left grip pointing down to left grip pointing up gyrRF increases
     //    When rotating controller from left grip pointing up to left grip pointing dwon gyrRF decreases    
-    std::swap(accYF, accZF); //float tmp; tmp = accYF; accYF = accZF; accZF = tmp;
+    std::swap(accXF, accYF); //float tmp; tmp = accYF; accYF = accZF; accZF = tmp;
+    std::swap(accZF, accYF); //float tmp; tmp = accYF; accYF = accZF; accZF = tmp;
     accZF = -accZF;
-    accYF = -accYF;
-    gyrRF = -gyrRF;
+    std::swap(gyrPF, gyrRF); //float tmp; tmp = accYF; accYF = accZF; accZF = tmp;
     gyrPF = -gyrPF;
-    gyrYF = -gyrYF;  
+    gyrRF = -gyrRF;
 
-    Serial.print(" AX: "); Serial.print(accXF);
-    Serial.print(" AY: "); Serial.print(accYF);
-    Serial.print(" AZ: "); Serial.print(accZF);
-    Serial.print(" GP: "); Serial.print(gyrPF);
-    Serial.print(" GY: "); Serial.print(gyrYF);
-    Serial.print(" GR: "); Serial.println(gyrRF);
+    gyrYF -= gyrOffYF;
+
+    if (serialPlotting) 
+    {
+        Serial.print(" AX: "); Serial.print(accXF);
+        Serial.print(" AY: "); Serial.print(accYF);
+        Serial.print(" AZ: "); Serial.print(accZF);
+        Serial.print(" GP: "); Serial.print(gyrPF);
+        Serial.print(" GY: "); Serial.print(gyrYF);
+        Serial.print(" GR: "); Serial.println(gyrRF);  
+    }
     
     uint8_t packetOutSize = makeDataPackage(&udpOut[0], dataPacketNumber, dataSendTime, accXF, accYF, accZF, gyrPF, gyrYF, gyrRF);
 
