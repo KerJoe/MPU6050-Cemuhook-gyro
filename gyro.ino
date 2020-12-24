@@ -6,12 +6,17 @@
 #include "CRC32.h"   // by bakercp, https://github.com/bakercp/CRC32
 
 WiFiUDP udp;
+char wifiSSID[] = "********";
+char wifiPass[] = "********";
+uint16_t udpPort = 26760;
 uint8_t  udpIn[28];
 uint8_t  udpOut[100];
 
 bool serialPlotting = false; // Change when using serial plotter
+bool gyrYOffsetCallibration = true; // Calculate additional Yaw offset
 int16_t accXI, accYI, accZI, gyrPI, gyrYI, gyrRI; // Raw integer orientation data
 float   accXF, accYF, accZF, gyrPF, gyrYF, gyrRF; // Float orientation data
+float   gyrOffYF = 0;
 uint32_t dataPacketNumber = 0; // Current data packet count
 // All time variables are in microseconds
 uint32_t dataSendTime; // Current time
@@ -19,55 +24,9 @@ uint32_t dataRequestTime; // Time of the last data request
 const uint32_t dataSendDelay = 4000; // Time between sending data packages
 const uint32_t dataRequestTimeout = 120000000; // Timeout time for data request
 
-/***************************************************************************************
- * User Defined Data
-****************************************************************************************/
-
-char wifiSSID[] = "********";
-char wifiPass[] = "********";
-uint16_t udpPort = 26760;
-
+MPU6050 accgyr;
 const uint8_t MPU6050_sda = 4, MPU6050_scl = 5; // MPU6050 I2C GPIO connection
 const uint8_t MPU_addr = 0x68; // I2C address of the MPU-6050
-
-
-int16_t* swapTable[] =
-{
-  &accZI,
-  &accXI,
-  &accYI,
-  &gyrRI,
-  &gyrPI,
-  &gyrYI,
-};
-bool signTable[] = // If true change sign
-{
-  false, // accXI
-  false, // accYI
-  true,  // accZI
-  true,  // gyrPI
-  false, // gyrYI
-  true,  // gyrRI
-};
-int16_t offsetTable[] =
-{
-  -2818, // accXI
-  2461, // accYI
-  1148, // accZI
-  -47, // gyrPI
-  -72, // gyrYI
-  35, // gyrRI
-};
-
-
-float gyrOffYF = 0; // Optional: Set this value to Gyro Y from PadTest when the gamepad is immobile to remove drift
-
-
-/***************************************************************************************
- * 
-****************************************************************************************/
-
-MPU6050 accgyr;
 // Gyro sensitivity 0: +/-250 deg/s, 1: +/-500 deg/s, 2: +/-1000 deg/s, 3: +/-2000 deg/s
 // If set too low it will introduce clipping
 // If set too high it will decrease sensitity
@@ -139,7 +98,7 @@ uint8_t makeInfoPackage(uint8_t* output, uint8_t numberOfControllers)
   }
 
   CRC32 crc; // Caclulate checksum
-  for (uint8_t i = 0; i < 20 + numberOfControllers * 12; i++) crc.update(udpOut[i]);
+  for(uint8_t i = 0; i < 20 + numberOfControllers * 12; i++) crc.update(udpOut[i]);
   uint32_t Checksum = crc.finalize();
   memcpy(&output[8], &Checksum, sizeof(Checksum)); // Copy bytes from Checksum to packet array
   
@@ -241,7 +200,7 @@ uint8_t makeDataPackage(uint8_t* output,       uint32_t packetCount,  uint32_t t
   memcpy(&output [96], &gyroscopeRol, sizeof(gyroscopeRol));
 
   CRC32 crc; // Caclulate checksum
-  for (uint8_t i = 0; i < 100; i++) crc.update(output [i]);
+  for(uint8_t i = 0; i < 100; i++) crc.update(output [i]);
   uint32_t Checksum = crc.finalize();
   memcpy(&output[8], &Checksum, sizeof(Checksum)); // Copy from Checksum to packet array
   
@@ -271,13 +230,27 @@ void setup()
   accgyr.initialize();    
   Serial.println(accgyr.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
   accgyr.setFullScaleGyroRange(gyroSens); // Set selected gyro sensetivity
-  accgyr.setDLPFMode(4); // Set low pass filter to 20 hz, for noise filtering
-  accgyr.setXAccelOffset(offsetTable[0]);
-  accgyr.setYAccelOffset(offsetTable[1]);
-  accgyr.setZAccelOffset(offsetTable[2]);
-  accgyr.setXGyroOffset(offsetTable[3]);
-  accgyr.setYGyroOffset(offsetTable[4]);
-  accgyr.setZGyroOffset(offsetTable[5]);  
+  accgyr.setDLPFMode(4); // Set low pass filter to 20 hz, for noise filtering  
+  // Set offsets to values calculated by IMU_ZERO example sketch
+  accgyr.setXAccelOffset(-2741);
+  accgyr.setYAccelOffset(2456);
+  accgyr.setZAccelOffset(1400);
+  accgyr.setXGyroOffset(-37);
+  accgyr.setYGyroOffset(-24);
+  accgyr.setZGyroOffset(167);
+
+  if (gyrYOffsetCallibration)
+  {
+    Serial.print("Additional Yaw callibration");  
+    for (uint8_t i = 0; i < 10; i++) // Use simple arithmetic mean
+    {
+      accgyr.getMotion6(&accXI, &accYI, &accZI, &gyrPI, &gyrRI, &gyrYI);
+      gyrOffYF += gyrYI / gyroLSB; // Instead of gyrYI use your actual Yaw axis
+      Serial.print("."); delay(100);
+    }  
+    gyrOffYF /= 10; Serial.println(gyrOffYF);
+  }
+  else gyrOffYF = 0.5f; // Make offset constant after a single callibration
 
   dataRequestTime = micros(); // Set dataRequestTime, so that if we won't get a data request in time we will shutdown
 
@@ -320,7 +293,7 @@ void loop()
   {        
     dataPacketNumber++; dataSendTime = micros();
     
-    accgyr.getMotion6(swapTable[0], swapTable[1], swapTable[2], swapTable[3], swapTable[4], swapTable[5]);  
+    accgyr.getMotion6(&accXI, &accYI, &accZI, &gyrPI, &gyrRI, &gyrYI);
 
     // For MPU-6050 the biggest possible number is 32768 and smallest is -32767,
     // But because it uses 2's complement 16 bit signed numbers the number 32728 is interpreted as -32728
@@ -328,15 +301,6 @@ void loop()
     // to subtract 1 from the raw data
     accXI--; accYI--; accZI--;
     gyrPI--; gyrYI--; gyrRI--;      
- 
-    // Inverse selected axis
-    accXI *= signTable[0] ? -1 : 1;
-    accYI *= signTable[1] ? -1 : 1;
-    accZI *= signTable[2] ? -1 : 1;
-    gyrPI *= signTable[3] ? -1 : 1;
-    gyrYI *= signTable[4] ? -1 : 1;
-    gyrRI *= signTable[5] ? -1 : 1;
-    //gyrYI = -gyrYI;
     
     // Convert raw data to float.
     accXF = accXI / 16384.0f; // Divide by LSB/mg, for 2g sensitivity it is 16384
@@ -346,7 +310,31 @@ void loop()
     gyrPF = gyrPI / gyroLSB;  // Divide by LSB/deg/s
     gyrYF = gyrYI / gyroLSB;
     gyrRF = gyrRI / gyroLSB;
-    
+
+    // To transform data from gyroscope to the form used by cemuhook use these guidelines
+    // (You can also use a demonstration image from the github page):
+    // -----
+    // 1) In the default position (i.e. when the controller is lying on a flat surface) the values 
+    //    of the controller are accXF = 0, accYF = -1, accZF = 0, gyrPF = 0, gyrRF = 0, gyrYF = 0;
+    // 2) When the face side of the controller points down accelerometer values are accXF = 0, accYF = 1, accZF = 0
+    //    When the underside of the controller points down accelerometer values are accXF = 0, accYF = -1, accZF = 0
+    //    When the left side of the controller points down accelerometer values are accXF = -1, accYF = 0, accZI = 0
+    //    When the right side of the controller points down accelerometer values are accXF = 1, accYF = 0, accZI = 0
+    //    When the front side of the controller points down accelerometer values are accXF = 0, accYF = 0, accZI = -1
+    //    When the back side of the controller points down accelerometer values are accXF = 0, accYF = 0, accZI = 1
+    // 3) When rotating controller from left to right gyrYF increases
+    //    When rotating controller from right to left gyrYF decreases
+    //    When rotating controller from down to up gyrPF increases
+    //    When rotating controller from up to down gyrPF decreases
+    //    When rotating controller from left grip pointing down to left grip pointing up gyrRF increases
+    //    When rotating controller from left grip pointing up to left grip pointing dwon gyrRF decreases    
+    std::swap(accXF, accYF); //float tmp; tmp = accYF; accYF = accZF; accZF = tmp;
+    std::swap(accZF, accYF); //float tmp; tmp = accYF; accYF = accZF; accZF = tmp;
+    accZF = -accZF;
+    std::swap(gyrPF, gyrRF); //float tmp; tmp = accYF; accYF = accZF; accZF = tmp;
+    gyrPF = -gyrPF;
+    gyrRF = -gyrRF;
+
     gyrYF -= gyrOffYF;
 
     if (serialPlotting) 
