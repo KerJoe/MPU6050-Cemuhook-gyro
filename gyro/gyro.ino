@@ -7,7 +7,8 @@
 
 WiFiUDP udp;
 uint8_t  udpIn[28];
-uint8_t  udpOut[100];
+uint8_t  udpInfoOut[32];
+uint8_t  udpDataOut[100];
 
 bool serialPlotting = false; // Change when using serial plotter
 int16_t accXI, accYI, accZI, gyrPI, gyrYI, gyrRI; // Raw integer orientation data
@@ -16,8 +17,13 @@ uint32_t dataPacketNumber = 0; // Current data packet count
 // All time variables are in microseconds
 uint32_t dataSendTime; // Current time
 uint32_t dataRequestTime; // Time of the last data request
-const uint32_t dataSendDelay = 4000; // Time between sending data packages
+const uint32_t dataSendDelay = 75000; // Time between sending data packages
 const uint32_t dataRequestTimeout = 120000000; // Timeout time for data request
+
+const uint32_t infoResponseSize = 32;
+const uint32_t dataResponseSize = 100;
+bool shouldSend = false;
+bool delayDataPacket = false;
 
 /***************************************************************************************
  * User Defined Data
@@ -75,7 +81,7 @@ const uint8_t gyroSens = 2;
 const float gyroLSB = 131.0f / pow(2, gyroSens);
 
 // Info package response packet
-uint8_t makeInfoPackage(uint8_t* output, uint8_t numberOfControllers)
+uint8_t makeInfoPackage(uint8_t* output, uint8_t portNumber)
 {
   // Magic server string
   output[0] = (uint8_t)'D';
@@ -85,8 +91,8 @@ uint8_t makeInfoPackage(uint8_t* output, uint8_t numberOfControllers)
   // Protocol version (1001)
   output[4] = 0xE9;
   output[5] = 0x03;
-  // Packet length without header plus the length of event type (4)
-  output[6] = (uint8_t)(4 + numberOfControllers * 12);
+  // Packet length without header plus the length of event type (16)
+  output[6] = (uint8_t)(16);
   output[7] = 0;
   // Zero out CRC32 field
   output[8] = 0;
@@ -103,47 +109,46 @@ uint8_t makeInfoPackage(uint8_t* output, uint8_t numberOfControllers)
   output[17] = 0x00;
   output[18] = 0x10;
   output[19] = 0x00;
-  
-  output[20] = 0x00; // Slot of the device we are reporting about (0)
-  output[21] = 0x02; // Slot state, connected (2)
-  output[22] = 0x02; // Device model, full gyro aka DS4 (2)
-  output[23] = 0x02; // Connection type, bluetooth (2). (May be either USB (1) or Bluetooth (2))
-  // MAC address of device (0x000000000001)
-  output[24] = 0x01; 
-  output[25] = 0x00;
-  output[26] = 0x00;
-  output[27] = 0x00;
-  output[28] = 0x00;
-  output[29] = 0x00;
-  // Batery status, full (5)
-  output[30] = 0x05; // ...
-  output[31] = 0x00; // Termination byte
 
-  // Set controllers other than 0 to unconected state
-  for (uint8_t i = 1; i < numberOfControllers; i++)
+  if (portNumber == 0) // Controller 0 is the only active controller
   {
-      output[20 + i * 12] = i;    // Slot of the device we are reporting about (i)
-      output[21 + i * 12] = 0x00; // Slot state, not connected (0)
-      output[22 + i * 12] = 0x00; // Device model, not applicable (0)
-      output[23 + i * 12] = 0x00; // Connection type, not applicable (0)
+    output[20] = 0x00; // Slot of the device we are reporting about (0)
+    output[21] = 0x02; // Slot state, connected (2)
+    output[22] = 0x02; // Device model, full gyro aka DS4 (2)
+    output[23] = 0x02; // Connection type, bluetooth (2). (May be either USB (1) or Bluetooth (2))
+    // MAC address of device (0x000000000001)
+    output[24] = 0x01; 
+    output[25] = 0x00;
+    output[26] = 0x00;
+    output[27] = 0x00;
+    output[28] = 0x00;
+    output[29] = 0x00;
+    // Batery status, full (5)
+    output[30] = 0x05; // ...
+    output[31] = 0x00; // Termination byte
+  }
+  else // Set controllers other than 0 to unconected state  
+  {
+      output[20] = portNumber;    // Slot of the device we are reporting about (i)
+      output[21] = 0x00; // Slot state, not connected (0)
+      output[22] = 0x00; // Device model, not applicable (0)
+      output[23] = 0x00; // Connection type, not applicable (0)
       // MAC address of device, not applicable (0x000000000000)
-      output[24 + i * 12] = 0x00;
-      output[25 + i * 12] = 0x00;
-      output[26 + i * 12] = 0x00;
-      output[27 + i * 12] = 0x00;
-      output[28 + i * 12] = 0x00;
-      output[29 + i * 12] = 0x00;
+      output[24] = 0x00;
+      output[25] = 0x00;
+      output[26] = 0x00;
+      output[27] = 0x00;
+      output[28] = 0x00;
+      output[29] = 0x00;
       // Batery status, not applicable (0)
-      output[30 + i * 12] = 0x00; // ...
-      output[31 + i * 12] = 0x00; // Termination byte
+      output[30] = 0x00; // ...
+      output[31] = 0x00; // Termination byte
   }
 
-  CRC32 crc; // Caclulate checksum
-  for (uint8_t i = 0; i < 20 + numberOfControllers * 12; i++) crc.update(udpOut[i]);
-  uint32_t Checksum = crc.finalize();
+  uint32_t Checksum = CRC32::calculate(output, 32);
   memcpy(&output[8], &Checksum, sizeof(Checksum)); // Copy bytes from Checksum to packet array
   
-  return 20 + numberOfControllers * 12; // Return the number of bytes in packet
+  return 32; // Return the number of bytes in packet
 }
 // Data package response packet
 uint8_t makeDataPackage(uint8_t* output,       uint32_t packetCount,  uint32_t timestamp, 
@@ -192,7 +197,7 @@ uint8_t makeDataPackage(uint8_t* output,       uint32_t packetCount,  uint32_t t
   output[30] = 0x05; // ...
 
   output[31] = 0x01; // Device state, active (1)
-  memcpy(&udpOut[32], &packetCount, sizeof(packetCount)); // Copy from packetCount to packet array 
+  memcpy(&output[32], &packetCount, sizeof(packetCount)); // Copy from packetCount to packet array 
   // We don't care about button, joystick and touchpad data, so we just their bytes to zero.
   output[36] = 0x00; // D-Pad Left, D-Pad Down, D-Pad Right, D-Pad Up, Options (?), R3, L3, Share (?)
   output[37] = 0x00; // Y, B, A, X, R1, L1, R2, L2 
@@ -240,9 +245,7 @@ uint8_t makeDataPackage(uint8_t* output,       uint32_t packetCount,  uint32_t t
   memcpy(&output [92], &gyroscopeYaw, sizeof(gyroscopeYaw));
   memcpy(&output [96], &gyroscopeRol, sizeof(gyroscopeRol));
 
-  CRC32 crc; // Caclulate checksum
-  for (uint8_t i = 0; i < 100; i++) crc.update(output [i]);
-  uint32_t Checksum = crc.finalize();
+  uint32_t Checksum = CRC32::calculate(output, 100);
   memcpy(&output[8], &Checksum, sizeof(Checksum)); // Copy from Checksum to packet array
   
   return 100; // Return the number of bytes in packet
@@ -271,7 +274,6 @@ void setup()
   accgyr.initialize();    
   Serial.println(accgyr.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
   accgyr.setFullScaleGyroRange(gyroSens); // Set selected gyro sensetivity
-  accgyr.setDLPFMode(4); // Set low pass filter to 20 hz, for noise filtering
   accgyr.setXAccelOffset(offsetTable[0]);
   accgyr.setYAccelOffset(offsetTable[1]);
   accgyr.setZAccelOffset(offsetTable[2]);
@@ -283,29 +285,32 @@ void setup()
 
   Serial.println("Setup done!");     
 }
-
 void loop() 
 {
   uint8_t packetInSize = udp.parsePacket();
   if (packetInSize)
   {
     udp.read(udpIn, sizeof(udpIn));
-    uint8_t packetOutSize;
     switch(udpIn[16]) // udpIn[16] - Least significant byte of event type
     {
       case 0x01: // Information about controllers
-        Serial.println("Got info request!");
-        
-        packetOutSize = makeInfoPackage(&udpOut[0], udpIn[20]); // udpIn[20] - Amount of ports we should report about
+        Serial.println("Got info request!");        
 
-        udp.beginPacket(udp.remoteIP(), udp.remotePort());
-        udp.write(udpOut, packetOutSize);
-        udp.endPacket();        
+        for (uint8_t i = 0; i < udpIn[20]; i++) // udpIn[20] - Amount of ports we should report about
+        {
+          makeInfoPackage(&udpInfoOut[0], udpIn[24 + i]); // udpIn[24 + i] - Slot numbers to report about
+  
+          udp.beginPacket(udp.remoteIP(), udp.remotePort());
+          udp.write(udpInfoOut, infoResponseSize);
+          udp.endPacket();        
+        }
+        shouldSend = false;
       break;
       case 0x02: // Controller input data
         Serial.println("Got data request!");      
         
         dataRequestTime = micros(); // Refresh timeout timer        
+        shouldSend = true;
       break;      
     }
   } 
@@ -316,8 +321,15 @@ void loop()
     Serial.println("Shutting down..."); Serial.flush();
     ESP.deepSleep(0); 
   }
-  if (micros() - dataSendTime > dataSendDelay) // Check if enough time has elapsed between data packets
-  {        
+  if (delayDataPacket && shouldSend)
+  {
+    udp.beginPacket(udp.remoteIP(), udp.remotePort());
+    udp.write(udpDataOut, dataResponseSize);
+    udp.endPacket();
+    delayDataPacket = false;
+  }
+  if ((micros() - dataSendTime > dataSendDelay) && shouldSend) // Check if enough time has elapsed between data packets
+  {            
     dataPacketNumber++; dataSendTime = micros();
     
     accgyr.getMotion6(swapTable[0], swapTable[1], swapTable[2], swapTable[3], swapTable[4], swapTable[5]);  
@@ -359,10 +371,15 @@ void loop()
         Serial.print(" GR: "); Serial.println(gyrRF);  
     }
     
-    uint8_t packetOutSize = makeDataPackage(&udpOut[0], dataPacketNumber, dataSendTime, accXF, accYF, accZF, gyrPF, gyrYF, gyrRF);
+    makeDataPackage(&udpDataOut[0], dataPacketNumber, dataSendTime, accXF, accYF, accZF, gyrPF, gyrYF, gyrRF);
 
-    udp.beginPacket(udp.remoteIP(), udp.remotePort());
-    udp.write(udpOut, packetOutSize);
-    udp.endPacket();
+    if (udp.parsePacket() == 0)
+    {
+      udp.beginPacket(udp.remoteIP(), udp.remotePort());
+      udp.write(udpDataOut, dataResponseSize);
+      udp.endPacket();
+    }
+    else    
+      delayDataPacket = true;
   }
 }
