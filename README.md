@@ -7,4 +7,4 @@ Motion controls source with Cemuhook protocol for Cemu, yuzu, Ryujinx, etc. Usin
 
 ### PadTest demonstration
 
-<img src="padtest.gif" width="300">
+<img src="padtest.gif" width="600">
