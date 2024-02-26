@@ -128,11 +128,11 @@ void setup()
   accgyr.setFullScaleGyroRange(gyroSens); 
 
 
-  Serial.println("Starting axis finding...");
-  Serial.println("Put controller on a flat surface in horizontal position and send new line"); while (Serial.available() == 0); Serial.read();
+  Serial.println("Starting axes finding...");
+  Serial.println("Put the controller on a flat surface in a horizontal position and send a new line"); while (Serial.available() == 0); Serial.read();
   accgyr.CalibrateAccel_gravitySelect(3); Serial.println();
     
-  Serial.println("Put the controller on the right side and send new line"); while (Serial.available() == 0); Serial.read();
+  Serial.println("Put the controller on the right side and send a new line"); while (Serial.available() == 0); Serial.read();
   int16_t ign;
   byte xAIndex, yAIndex, zAIndex; 
   bool xASign, yASign, zASign; // True is negative
@@ -142,7 +142,7 @@ void setup()
   readings0B[1] = abs(readings0[1]) / 16384.0f > 0.5f; Serial.print("1: "); Serial.println(readings0[1] / 16384.0f);
   readings0B[2] = abs(readings0[2]) / 16384.0f > 0.5f; Serial.print("2: "); Serial.println(readings0[2] / 16384.0f);  
   
-  Serial.println("Put the controller on the back side (with grips pointing downwards and face with buttons and sticks towards you) and send new line"); while (Serial.available() == 0); Serial.read();
+  Serial.println("Put the controller on the back side (with grips pointing downwards and face side (with buttons and sticks) towards you) and send a new line"); while (Serial.available() == 0); Serial.read();
   int16_t readings1[3]; bool readings1B[3];
   accgyr.getMotion6(&readings1[0], &readings1[1], &readings1[2], &ign, &ign, &ign);
   readings1B[0] = abs(readings1[0]) / 16384.0f > 0.5f; Serial.print("0: "); Serial.println(readings1[0] / 16384.0f);
@@ -179,30 +179,30 @@ void setup()
   
   
   Serial.println("Starting calibration...");
-  Serial.println("Put controller on a flat surface in horizontal position and send new line"); while (Serial.available() == 0); Serial.read();
+  Serial.println("Put the controller on a flat surface in a horizontal position and send a new line"); while (Serial.available() == 0); Serial.read();
   accgyr.CalibrateAccel_gravitySelect(6, yAIndex, yASign);
   accgyr.CalibrateGyro(6);
-  Serial.println("\nat 600 Readings");
+  Serial.println("\nat 600 readings");
   accgyr.PrintActiveOffsets();
   Serial.println();
   accgyr.CalibrateAccel_gravitySelect(1, yAIndex, yASign);
   accgyr.CalibrateGyro(1);
-  Serial.println("700 Total Readings");
+  Serial.println("700 Total readings");
   accgyr.PrintActiveOffsets();
   Serial.println();
   accgyr.CalibrateAccel_gravitySelect(1, yAIndex, yASign);
   accgyr.CalibrateGyro(1);
-  Serial.println("800 Total Readings");
+  Serial.println("800 Total readings");
   accgyr.PrintActiveOffsets();
   Serial.println();
   accgyr.CalibrateAccel_gravitySelect(1, yAIndex, yASign);
   accgyr.CalibrateGyro(1);
-  Serial.println("900 Total Readings");
+  Serial.println("900 Total readings");
   accgyr.PrintActiveOffsets();
   Serial.println();    
   accgyr.CalibrateAccel_gravitySelect(1, yAIndex, yASign);
   accgyr.CalibrateGyro(1);
-  Serial.println("1000 Total Readings");
+  Serial.println("1000 Total readings");
   int16_t readings[3]; int16_t ignn;
   accgyr.getMotion6(&readings[0], &readings[1], &readings[2], &ignn, &ignn, &ignn);
   Serial.println(readings[0] / 16384.0f);
