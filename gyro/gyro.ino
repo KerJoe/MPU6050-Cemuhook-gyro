@@ -18,7 +18,7 @@ uint32_t dataPacketNumber = 0; // Current data packet count
 uint32_t dataSendTime; // Current time
 uint32_t dataRequestTime; // Time of the last data request
 const uint32_t dataSendDelay = 75000; // Time between sending data packages
-const uint32_t dataRequestTimeout = 120000000; // Timeout time for data request
+const uint32_t dataRequestTimeout = 120000000; // Timeout time for data request, if 0 then disabled
 
 const uint32_t infoResponseSize = 32;
 const uint32_t dataResponseSize = 100;
@@ -314,7 +314,7 @@ void loop()
       break;      
     }
   } 
-  if (micros() - dataRequestTime > dataRequestTimeout) // Check if timedout by a lack of controller data requests
+  if (dataRequestTimeout && (micros() - dataRequestTime > dataRequestTimeout)) // Check if timedout by a lack of controller data requests
   {    
     // If we haven't recieved any datapacket in time, 
     // than orientation information is not needed, so we will shutdown to save energy for the gamepad
@@ -348,7 +348,6 @@ void loop()
     gyrPI *= signTable[3] ? -1 : 1;
     gyrYI *= signTable[4] ? -1 : 1;
     gyrRI *= signTable[5] ? -1 : 1;
-    //gyrYI = -gyrYI;
     
     // Convert raw data to float.
     accXF = accXI / 16384.0f; // Divide by LSB/mg, for 2g sensitivity it is 16384
