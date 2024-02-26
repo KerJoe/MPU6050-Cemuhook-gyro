@@ -123,7 +123,7 @@ uint8_t makeInfoPackage(uint8_t* output, uint8_t portNumber)
     output[27] = 0x00;
     output[28] = 0x00;
     output[29] = 0x00;
-    // Batery status, full (5)
+    // Battery status, full (5)
     output[30] = 0x05; // ...
     output[31] = 0x00; // Termination byte
   }
@@ -140,7 +140,7 @@ uint8_t makeInfoPackage(uint8_t* output, uint8_t portNumber)
       output[27] = 0x00;
       output[28] = 0x00;
       output[29] = 0x00;
-      // Batery status, not applicable (0)
+      // Battery status, not applicable (0)
       output[30] = 0x00; // ...
       output[31] = 0x00; // Termination byte
   }
@@ -193,7 +193,7 @@ uint8_t makeDataPackage(uint8_t* output,       uint32_t packetCount,  uint32_t t
   output[27] = 0x00;
   output[28] = 0x00;
   output[29] = 0x00;
-  // Batery status, full (5)
+  // Battery status, full (5)
   output[30] = 0x05; // ...
 
   output[31] = 0x01; // Device state, active (1)
@@ -273,7 +273,7 @@ void setup()
   Wire.begin(MPU6050_sda, MPU6050_scl); // Connect MPU6050 to GPIO pins defined in MPU6050_sda and MPU6050_scl
   accgyr.initialize();    
   Serial.println(accgyr.testConnection() ? "MPU6050 connection successful" : "MPU6050 connection failed");
-  accgyr.setFullScaleGyroRange(gyroSens); // Set selected gyro sensetivity
+  accgyr.setFullScaleGyroRange(gyroSens); // Set selected gyro sensitivity
   accgyr.setXAccelOffset(offsetTable[0]);
   accgyr.setYAccelOffset(offsetTable[1]);
   accgyr.setZAccelOffset(offsetTable[2]);
@@ -316,7 +316,7 @@ void loop()
   } 
   if (dataRequestTimeout && (micros() - dataRequestTime > dataRequestTimeout)) // Check if timedout by a lack of controller data requests
   {    
-    // If we haven't recieved any datapacket in time, 
+    // If we haven't received any datapacket in time,
     // than orientation information is not needed, so we will shutdown to save energy for the gamepad
     Serial.println("Shutting down..."); Serial.flush();
     ESP.deepSleep(0); 
@@ -336,7 +336,7 @@ void loop()
 
     // For MPU-6050 the biggest possible number is 32768 and smallest is -32767,
     // But because it uses 2's complement 16 bit signed numbers the number 32728 is interpreted as -32728
-    // So if we want to prevent the wrap arround from positive to negative we need
+    // So if we want to prevent the wrap around from positive to negative we need
     // to subtract 1 from the raw data
     accXI--; accYI--; accZI--;
     gyrPI--; gyrYI--; gyrRI--;      
