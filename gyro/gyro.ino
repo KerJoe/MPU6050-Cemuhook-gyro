@@ -60,6 +60,9 @@ uint8_t udpIn[28];
 uint8_t udpInfoOut[32];
 uint8_t udpDataOut[100];
 
+// MAC address to be reported, if set to 0 then the MAC of the ESP8266 is used
+uint8_t macAddress[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+
 bool serialPlotting = false; // Change when using serial plotter for debugging
 bool debugLog = false; // Enable debug logging
 
@@ -126,13 +129,13 @@ uint8_t makeInfoPacket(uint8_t* output, uint8_t portNumber)
     output[21] = 0x02; // Slot state, connected (2)
     output[22] = 0x02; // Device model, full gyro aka DS4 (2)
     output[23] = 0x02; // Connection type, bluetooth (2). (May be either USB (1) or Bluetooth (2))
-    // MAC address of device (0x000000000001)
-    output[24] = 0x01;
-    output[25] = 0x00;
-    output[26] = 0x00;
-    output[27] = 0x00;
-    output[28] = 0x00;
-    output[29] = 0x00;
+    // MAC address of device (macAddress)
+    output[24] = macAddress[0];
+    output[25] = macAddress[1];
+    output[26] = macAddress[2];
+    output[27] = macAddress[3];
+    output[28] = macAddress[4];
+    output[29] = macAddress[5];
     // Battery status, full (5)
     output[30] = 0x05; // ...
     output[31] = 0x00; // Termination byte
@@ -162,8 +165,8 @@ uint8_t makeInfoPacket(uint8_t* output, uint8_t portNumber)
 }
 // Data package response packet
 uint8_t makeDataPacket(uint8_t* output,       uint32_t packetCount,  uint32_t timestamp,
-                        float accellerometerX, float accellerometerY, float accellerometerZ,
-                        float gyroscopePit,    float gyroscopeYaw,    float gyroscopeRol)
+                       float accellerometerX, float accellerometerY, float accellerometerZ,
+                       float gyroscopePit,    float gyroscopeYaw,    float gyroscopeRol)
 {
   // Magic server string
   output[0] = (uint8_t)'D';
@@ -196,13 +199,13 @@ uint8_t makeDataPacket(uint8_t* output,       uint32_t packetCount,  uint32_t ti
   output[21] = 0x02; // Slot state, connected (2)
   output[22] = 0x02; // Device model, full gyro aka DS4 (2)
   output[23] = 0x02; // Connection type, bluetooth (2). (May be either USB (1) or Bluetooth (2))
-  // MAC address of device (0x000000000001)
-  output[24] = 0x01;
-  output[25] = 0x00;
-  output[26] = 0x00;
-  output[27] = 0x00;
-  output[28] = 0x00;
-  output[29] = 0x00;
+  // MAC address of device (macAddress)
+  output[24] = macAddress[0];
+  output[25] = macAddress[1];
+  output[26] = macAddress[2];
+  output[27] = macAddress[3];
+  output[28] = macAddress[4];
+  output[29] = macAddress[5];
   // Battery status, full (5)
   output[30] = 0x05; // ...
 
@@ -330,6 +333,13 @@ void setup()
   }
   Serial.print("\nConnected, IP address: ");
   Serial.println(WiFi.localIP());
+
+  // Check if macAddress == 0
+  if (!(macAddress[0] | macAddress[1] | macAddress[2] | macAddress[3] | macAddress[4] | macAddress[5]))
+    WiFi.macAddress(macAddress);
+
+  Serial.print("MAC address: ");
+  Serial.println(WiFi.macAddress());
 
   udp.begin(udpPort);
   Serial.print("UDP server has been set up at port: ");
